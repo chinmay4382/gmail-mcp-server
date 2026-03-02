@@ -1,5 +1,7 @@
 # Email MCP Server
 
+![Email MCP Server](Email_mcp.png)
+
 An MCP (Model Context Protocol) server for reading and sending emails via IMAP/SMTP. This server exposes email operations as MCP tools that can be used by Claude and other AI models. Works with Gmail, Outlook, and any email provider that supports IMAP/SMTP.
 
 ## Features
@@ -47,10 +49,6 @@ pip install -e .
 ### 4. Configuration
 
 Create a `.env` file in the project directory:
-
-```bash
-cp .env.example .env
-```
 
 Edit `.env` with your email credentials:
 
@@ -154,23 +152,6 @@ List all available mailbox folders.
 - IMAP Server: `imap.gmail.com` (port 993)
 - SMTP Server: `smtp.gmail.com` (port 587)
 - Requires: App Password (not your regular Gmail password)
-
-### Outlook
-- IMAP Server: `imap-mail.outlook.com` (port 993)
-- SMTP Server: `smtp-mail.outlook.com` (port 587)
-- Requires: Your Outlook email password
-
-### Yahoo Mail
-- IMAP Server: `imap.mail.yahoo.com` (port 993)
-- SMTP Server: `smtp.mail.yahoo.com` (port 587)
-- Requires: App Password
-
-### Other Providers
-Set custom servers in `.env`:
-```
-IMAP_SERVER=your.imap.server
-SMTP_SERVER=your.smtp.server
-```
 
 ## Configuration
 
