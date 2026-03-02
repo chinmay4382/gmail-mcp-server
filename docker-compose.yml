@@ -1,0 +1,16 @@
+services:
+  email-mcp-server:
+    build: .
+    image: email-mcp-server:latest
+    stdin_open: true   # required for MCP stdio transport
+    env_file:
+      - .env
+
+  email-ui:
+    build: .
+    image: email-mcp-server:latest
+    command: python api_server.py
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env

@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email MCP Client</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Google Sans', 'Roboto', Arial, sans-serif; }
+    .sidebar-item { transition: background 0.15s; }
+    .sidebar-item:hover { background: #e8eaed; }
+    .sidebar-item.active { background: #d3e3fd; font-weight: 600; }
+    .email-row { transition: background 0.1s; border-bottom: 1px solid #f1f3f4; cursor: pointer; }
+    .email-row:hover { background: #f6f8fc; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .email-row.unread .email-subject { font-weight: 700; }
+    .email-row.unread { background: #fff; }
+    .email-row.read { background: #f6f8fc; }
+    .badge { font-size: 11px; padding: 1px 7px; border-radius: 9999px; }
+    .tool-card { transition: box-shadow 0.2s, transform 0.2s; }
+    .tool-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); transform: translateY(-2px); }
+    .spinner { animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .toast { animation: slideUp 0.3s ease; }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .modal-overlay { animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    pre { white-space: pre-wrap; word-break: break-word; }
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
+
+    /* ── Chat panel ── */
+    #chatPanel {
+      position: fixed; right: 0; top: 60px; bottom: 0; width: 380px;
+      background: #fff; border-left: 1px solid #e0e0e0;
+      display: flex; flex-direction: column; z-index: 40;
+      transform: translateX(100%); transition: transform 0.25s ease;
+      box-shadow: -4px 0 24px rgba(0,0,0,.08);
+    }
+    #chatPanel.open { transform: translateX(0); }
+    .chat-bubble-user {
+      background: #1a73e8; color: #fff; border-radius: 18px 18px 4px 18px;
+      padding: 10px 14px; max-width: 85%; font-size: 14px; line-height: 1.5;
+      align-self: flex-end; word-break: break-word;
+    }
+    .chat-bubble-ai {
+      background: #f1f3f4; color: #202124; border-radius: 18px 18px 18px 4px;
+      padding: 10px 14px; max-width: 85%; font-size: 14px; line-height: 1.5;
+      align-self: flex-start; word-break: break-word;
+    }
+    .chat-bubble-ai.streaming::after {
+      content: '▋'; animation: blink 0.7s step-start infinite; margin-left: 2px;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+    .tool-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: #e8f0fe; color: #1557b0; border-radius: 12px;
+      padding: 3px 10px; font-size: 11px; font-weight: 500;
+      align-self: flex-start; margin-top: 4px;
+    }
+    .tool-chip.done { background: #e6f4ea; color: #137333; }
+    .chat-input-row {
+      display: flex; align-items: flex-end; gap: 8px;
+      padding: 12px; border-top: 1px solid #e0e0e0; background: #fff;
+    }
+    #chatInput {
+      flex: 1; resize: none; border: 1px solid #dadce0; border-radius: 20px;
+      padding: 10px 16px; font-size: 14px; outline: none; max-height: 120px;
+      font-family: inherit; line-height: 1.4; overflow-y: auto;
+    }
+    #chatInput:focus { border-color: #1a73e8; box-shadow: 0 0 0 2px #d2e3fc; }
+    .chat-send-btn {
+      width: 38px; height: 38px; border-radius: 50%; background: #1a73e8;
+      border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s; flex-shrink: 0;
+    }
+    .chat-send-btn:hover { background: #1558c0; }
+    .chat-send-btn:disabled { background: #dadce0; cursor: default; }
+    .chat-welcome {
+      flex: 1; display: flex; flex-col; align-items: center; justify-content: center;
+      padding: 32px 24px; text-align: center; gap: 12px;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col overflow-hidden">
+
+<!-- ===== TOP NAV ===== -->
+<header class="flex items-center px-4 py-2 bg-white shadow-sm z-20 shrink-0" style="height:60px">
+  <div class="flex items-center gap-3 w-64 shrink-0">
+    <svg class="w-8 h-8 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+    </svg>
+    <span class="text-xl font-medium text-gray-700">Email MCP</span>
+    <span id="statusDot" class="w-2 h-2 rounded-full bg-gray-300 ml-1" title="Status"></span>
+  </div>
+
+  <!-- Search bar -->
+  <div class="flex-1 max-w-2xl mx-auto relative">
+    <div class="flex items-center bg-gray-100 rounded-2xl px-4 py-2 gap-2 focus-within:bg-white focus-within:shadow-md focus-within:ring-1 focus-within:ring-blue-200 transition">
+      <svg class="w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+      </svg>
+      <input id="searchInput" type="text" placeholder="Search emails…" class="bg-transparent outline-none flex-1 text-sm text-gray-700 placeholder-gray-400" />
+      <select id="searchType" class="bg-transparent text-xs text-gray-500 outline-none cursor-pointer">
+        <option value="query">IMAP Query</option>
+        <option value="sender">From sender</option>
+        <option value="subject">By subject</option>
+      </select>
+      <button onclick="runSearch()" class="text-blue-600 text-xs font-medium hover:underline">Search</button>
+    </div>
+  </div>
+
+  <!-- Compose + AI chat button -->
+  <div class="flex items-center gap-3 ml-4">
+    <button onclick="openCompose()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-full shadow transition">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+      </svg>
+      Compose
+    </button>
+    <button onclick="toggleChat()" id="chatToggleBtn"
+      class="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-full shadow transition"
+      title="Ask AI">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M9.663 17h4.673M12 3v1m6.364 1.636-.707.707M21 12h-1M4 12H3m3.343-5.657-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+      </svg>
+      Ask AI
+    </button>
+    <button onclick="showPage('tools')" class="p-2 hover:bg-gray-100 rounded-full" title="MCP Tools">
+      <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<!-- ===== MAIN LAYOUT ===== -->
+<div class="flex flex-1 overflow-hidden">
+
+  <!-- SIDEBAR -->
+  <aside class="w-64 bg-white shrink-0 overflow-y-auto py-2 border-r border-gray-100">
+    <div class="px-3 py-1">
+      <button onclick="loadEmails('INBOX', false)" class="sidebar-item active w-full text-left flex items-center gap-3 px-3 py-2 rounded-2xl text-sm text-gray-700" id="nav-inbox">
+        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7m16 0-2 8H6l-2-8m16 0H4"/>
+        </svg>
+        Inbox
+        <span id="unreadBadge" class="ml-auto badge bg-blue-100 text-blue-700 hidden"></span>
+      </button>
+      <button onclick="loadUnread()" class="sidebar-item w-full text-left flex items-center gap-3 px-3 py-2 rounded-2xl text-sm text-gray-700 mt-1">
+        <svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 0 0 2.22 0L21 8M5 19h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2z"/>
+        </svg>
+        Unread
+      </button>
+      <button onclick="showPage('tools')" class="sidebar-item w-full text-left flex items-center gap-3 px-3 py-2 rounded-2xl text-sm text-gray-700 mt-1">
+        <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+        </svg>
+        MCP Tools
+      </button>
+    </div>
+
+    <!-- Folders -->
+    <div class="px-3 mt-4">
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide px-3 mb-1">Folders</p>
+      <div id="folderList" class="space-y-0.5">
+        <div class="px-3 py-2 text-xs text-gray-400">Loading…</div>
+      </div>
+    </div>
+
+    <!-- API Docs link -->
+    <div class="px-6 mt-6 pb-4">
+      <a href="/docs" target="_blank" class="text-xs text-blue-500 hover:underline flex items-center gap-1">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+        </svg>
+        API Docs (Swagger)
+      </a>
+    </div>
+  </aside>
+
+  <!-- ===== CONTENT AREA ===== -->
+  <main class="flex-1 flex overflow-hidden">
+
+    <!-- EMAIL LIST + DETAIL SPLIT -->
+    <section id="page-emails" class="flex-1 flex overflow-hidden">
+
+      <!-- Email list panel -->
+      <div id="emailListPanel" class="w-full md:w-2/5 border-r border-gray-100 overflow-y-auto bg-white flex flex-col">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
+          <div>
+            <h2 id="listTitle" class="text-sm font-semibold text-gray-700">Inbox</h2>
+            <p id="listSubtitle" class="text-xs text-gray-400"></p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="maxResults" class="text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 bg-white" onchange="refreshCurrentView()">
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+            </select>
+            <button onclick="refreshCurrentView()" class="p-1.5 hover:bg-gray-100 rounded-full" title="Refresh">
+              <svg id="refreshIcon" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 0 1-15.357-2m15.357 2H15"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div id="emailList" class="flex-1 overflow-y-auto">
+          <div class="flex flex-col items-center justify-center h-full text-gray-400 text-sm gap-2">
+            <svg class="w-10 h-10 text-gray-200" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+            </svg>
+            Loading emails…
+          </div>
+        </div>
+      </div>
+
+      <!-- Email detail panel -->
+      <div id="emailDetailPanel" class="hidden md:flex flex-col flex-1 overflow-y-auto bg-white">
+        <div id="emailDetail" class="flex flex-col items-center justify-center h-full text-gray-300 gap-3">
+          <svg class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+          </svg>
+          <p class="text-sm">Select an email to read</p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ===== MCP TOOLS PAGE ===== -->
+    <section id="page-tools" class="hidden flex-1 overflow-y-auto p-6 bg-gray-50">
+      <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-semibold text-gray-800 mb-1">MCP Server Tools</h1>
+        <p class="text-sm text-gray-500 mb-6">All tools exposed by the <code class="bg-gray-100 px-1 rounded">email-mcp-server</code> — click a card to try it.</p>
+
+        <div id="toolsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <!-- populated by JS -->
+        </div>
+
+        <!-- Status card -->
+        <div class="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <h3 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/>
+            </svg>
+            Server Status
+          </h3>
+          <pre id="statusJson" class="bg-gray-50 rounded-xl p-4 text-xs text-gray-600 overflow-auto">Loading…</pre>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===== TOOL PLAYGROUND MODAL ===== -->
+<div id="toolModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeToolModal()"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div>
+        <h3 id="modalTitle" class="font-semibold text-gray-800 text-base"></h3>
+        <p id="modalDesc" class="text-xs text-gray-500 mt-0.5"></p>
+      </div>
+      <button onclick="closeToolModal()" class="p-2 hover:bg-gray-100 rounded-full text-gray-400">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div id="modalBody" class="px-6 py-4 space-y-3 max-h-96 overflow-y-auto"></div>
+    <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+      <button onclick="closeToolModal()" class="text-sm px-4 py-2 rounded-xl border border-gray-200 hover:bg-gray-100 text-gray-600">Cancel</button>
+      <button id="modalRunBtn" class="text-sm px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium">Run</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== AI CHAT PANEL ===== -->
+<div id="chatPanel">
+  <!-- Header -->
+  <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center">
+        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9.663 17h4.673M12 3v1m6.364 1.636-.707.707M21 12h-1M4 12H3m3.343-5.657-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+        </svg>
+      </div>
+      <div>
+        <p class="text-sm font-semibold text-gray-800">Email AI Assistant</p>
+        <p class="text-xs text-gray-400">Powered by Claude Opus</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-1">
+      <button onclick="clearChat()" class="p-1.5 hover:bg-gray-100 rounded-full text-gray-400" title="Clear chat">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16"/>
+        </svg>
+      </button>
+      <button onclick="toggleChat()" class="p-1.5 hover:bg-gray-100 rounded-full text-gray-400" title="Close">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div id="chatMessages" class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
+    <!-- Welcome state -->
+    <div id="chatWelcome" class="chat-welcome flex flex-col">
+      <div class="w-14 h-14 rounded-full bg-purple-100 flex items-center justify-center mx-auto">
+        <svg class="w-7 h-7 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+        </svg>
+      </div>
+      <p class="text-sm font-semibold text-gray-700 mt-3">Ask me anything about your emails</p>
+      <p class="text-xs text-gray-400 mt-1">I can read, search, and send emails for you.</p>
+      <div class="mt-4 flex flex-col gap-2 w-full">
+        <button onclick="quickPrompt('Show my unread emails')"
+          class="text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-gray-600 transition">
+          📬 Show my unread emails
+        </button>
+        <button onclick="quickPrompt('List emails from the last week')"
+          class="text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-gray-600 transition">
+          📅 List emails from the last week
+        </button>
+        <button onclick="quickPrompt('What folders do I have?')"
+          class="text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-gray-600 transition">
+          📁 What folders do I have?
+        </button>
+        <button onclick="quickPrompt('Search for emails about invoice')"
+          class="text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-gray-600 transition">
+          🔍 Search for emails about invoice
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input -->
+  <div class="chat-input-row shrink-0">
+    <textarea id="chatInput" rows="1" placeholder="Ask about your emails…"
+      oninput="autoResizeChatInput(this)"
+      onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendChatMessage();}"></textarea>
+    <button id="chatSendBtn" class="chat-send-btn" onclick="sendChatMessage()">
+      <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<!-- ===== COMPOSE MODAL ===== -->
+<div id="composeModal" class="hidden fixed inset-0 z-50 flex items-end justify-end p-6 modal-overlay pointer-events-none">
+  <div class="pointer-events-auto w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col" style="max-height:80vh">
+    <div class="flex items-center justify-between px-5 py-3 bg-gray-800 text-white">
+      <span class="text-sm font-medium">New Message</span>
+      <div class="flex gap-2">
+        <button onclick="closeCompose()" class="p-1 hover:bg-gray-700 rounded text-gray-300">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="flex flex-col flex-1 overflow-y-auto">
+      <input id="composeTo" type="email" placeholder="To" class="px-5 py-3 text-sm border-b border-gray-100 outline-none placeholder-gray-400" />
+      <input id="composeSubject" type="text" placeholder="Subject" class="px-5 py-3 text-sm border-b border-gray-100 outline-none placeholder-gray-400" />
+      <textarea id="composeBody" rows="8" placeholder="Compose email…" class="px-5 py-3 text-sm flex-1 outline-none resize-none placeholder-gray-400"></textarea>
+    </div>
+    <div class="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+      <label class="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+        <input type="checkbox" id="composeHtml" class="rounded" /> HTML body
+      </label>
+      <button onclick="sendEmail()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2 rounded-full shadow">
+        Send
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TOAST ===== -->
+<div id="toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 toast">
+  <div id="toastInner" class="flex items-center gap-3 bg-gray-900 text-white text-sm px-5 py-3 rounded-full shadow-lg"></div>
+</div>
+
+<script>
+// ============================================================
+// Config
+// ============================================================
+const API = '';  // same origin
+
+// ============================================================
+// State
+// ============================================================
+let currentView = { type: 'inbox', folder: 'INBOX' };
+let currentEmailId = null;
+
+// ============================================================
+// Utilities
+// ============================================================
+function showToast(msg, type = 'info') {
+  const toast = document.getElementById('toast');
+  const inner = document.getElementById('toastInner');
+  const colors = { info: 'bg-gray-900', success: 'bg-green-700', error: 'bg-red-600' };
+  inner.className = `flex items-center gap-3 text-white text-sm px-5 py-3 rounded-full shadow-lg ${colors[type] || 'bg-gray-900'}`;
+  inner.textContent = msg;
+  toast.classList.remove('hidden');
+  setTimeout(() => toast.classList.add('hidden'), 3500);
+}
+
+function setLoading(on) {
+  const icon = document.getElementById('refreshIcon');
+  if (on) icon.classList.add('spinner'); else icon.classList.remove('spinner');
+}
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API + path, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || res.statusText);
+  }
+  return res.json();
+}
+
+function avatar(name) {
+  const letter = (name || '?')[0].toUpperCase();
+  const colors = ['bg-red-400','bg-orange-400','bg-amber-400','bg-green-400','bg-teal-400','bg-blue-400','bg-purple-400','bg-pink-400'];
+  const c = colors[letter.charCodeAt(0) % colors.length];
+  return `<div class="w-9 h-9 rounded-full ${c} flex items-center justify-center text-white font-semibold text-sm shrink-0">${letter}</div>`;
+}
+
+function formatDate(dateStr) {
+  if (!dateStr || dateStr === 'Unknown') return '';
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  } catch { return dateStr.slice(0, 16); }
+}
+
+function senderName(from) {
+  const m = from.match(/^"?([^"<]+)"?\s*</);
+  return m ? m[1].trim() : from.split('@')[0];
+}
+
+// ============================================================
+// Page switching
+// ============================================================
+function showPage(page) {
+  document.getElementById('page-emails').classList.toggle('hidden', page !== 'emails');
+  document.getElementById('page-tools').classList.toggle('hidden', page !== 'tools');
+  if (page === 'tools') loadToolsPage();
+}
+
+// ============================================================
+// Sidebar folder list
+// ============================================================
+async function loadFolders() {
+  try {
+    const data = await apiFetch('/api/folders');
+    const el = document.getElementById('folderList');
+    el.innerHTML = data.folders.slice(0, 20).map(f => `
+      <button onclick="loadEmails('${f.replace(/'/g,"\\'")}', false)"
+        class="sidebar-item w-full text-left flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs text-gray-600 truncate">
+        <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7a1 1 0 0 1 1-1h6l2 2h8a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z"/>
+        </svg>
+        <span class="truncate">${f}</span>
+      </button>
+    `).join('');
+  } catch (e) {
+    document.getElementById('folderList').innerHTML = `<p class="px-3 text-xs text-red-400">${e.message}</p>`;
+  }
+}
+
+// ============================================================
+// Status dot
+// ============================================================
+async function checkStatus() {
+  try {
+    const s = await apiFetch('/api/status');
+    const dot = document.getElementById('statusDot');
+    dot.className = `w-2 h-2 rounded-full ${s.connected ? 'bg-green-400' : 'bg-red-400'} ml-1`;
+    dot.title = s.connected ? `Connected: ${s.email}` : 'Disconnected';
+  } catch {}
+}
+
+// ============================================================
+// Email list
+// ============================================================
+async function loadEmails(folder = 'INBOX', unreadOnly = false) {
+  showPage('emails');
+  currentView = { type: 'folder', folder, unreadOnly };
+  document.getElementById('listTitle').textContent = folder;
+  document.getElementById('listSubtitle').textContent = unreadOnly ? 'Unread only' : '';
+  setLoading(true);
+  try {
+    const max = document.getElementById('maxResults').value;
+    const data = await apiFetch(`/api/emails?folder=${encodeURIComponent(folder)}&max_results=${max}&unread_only=${unreadOnly}`);
+    renderEmailList(data.emails, `${data.count} message${data.count !== 1 ? 's' : ''}`);
+  } catch (e) {
+    showToast(e.message, 'error');
+    document.getElementById('emailList').innerHTML = `<div class="p-6 text-sm text-red-500">${e.message}</div>`;
+  } finally { setLoading(false); }
+}
+
+async function loadUnread() {
+  showPage('emails');
+  currentView = { type: 'unread' };
+  document.getElementById('listTitle').textContent = 'Unread';
+  document.getElementById('listSubtitle').textContent = '';
+  setLoading(true);
+  try {
+    const max = document.getElementById('maxResults').value;
+    const data = await apiFetch(`/api/emails/unread?max_results=${max}`);
+    renderEmailList(data.emails, `${data.count} unread`);
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally { setLoading(false); }
+}
+
+function refreshCurrentView() {
+  const v = currentView;
+  if (v.type === 'unread') loadUnread();
+  else if (v.type === 'search') runSearch();
+  else loadEmails(v.folder, v.unreadOnly);
+}
+
+function renderEmailList(emails, subtitle = '') {
+  document.getElementById('listSubtitle').textContent = subtitle;
+  const el = document.getElementById('emailList');
+  if (!emails || emails.length === 0) {
+    el.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-300 gap-2 py-16">
+      <svg class="w-10 h-10" fill="currentColor" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+      <p class="text-sm">No emails found</p></div>`;
+    return;
+  }
+  el.innerHTML = emails.map(e => `
+    <div class="email-row px-4 py-3 flex items-start gap-3" onclick="openEmail('${e.id}')">
+      ${avatar(senderName(e.from || ''))}
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between">
+          <span class="email-subject text-sm text-gray-800 truncate font-medium">${senderName(e.from || 'Unknown')}</span>
+          <span class="text-xs text-gray-400 shrink-0 ml-2">${formatDate(e.date)}</span>
+        </div>
+        <p class="text-sm text-gray-700 truncate">${e.subject || '(no subject)'}</p>
+        <p class="text-xs text-gray-400 truncate mt-0.5">${(e.body || '').slice(0, 80)}</p>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// Email detail
+// ============================================================
+async function openEmail(id) {
+  currentEmailId = id;
+  const panel = document.getElementById('emailDetailPanel');
+  const detail = document.getElementById('emailDetail');
+  panel.classList.remove('hidden');
+  detail.innerHTML = `<div class="flex items-center justify-center h-full"><div class="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full spinner"></div></div>`;
+  try {
+    const e = await apiFetch(`/api/emails/${id}`);
+    detail.innerHTML = `
+      <div class="px-6 py-5 border-b border-gray-100 sticky top-0 bg-white z-10">
+        <h2 class="text-lg font-semibold text-gray-800 leading-tight">${e.subject || '(no subject)'}</h2>
+        <div class="flex items-center gap-3 mt-3">
+          ${avatar(senderName(e.from || ''))}
+          <div>
+            <p class="text-sm font-medium text-gray-700">${senderName(e.from || 'Unknown')}</p>
+            <p class="text-xs text-gray-400">${e.from || ''}</p>
+          </div>
+          <span class="ml-auto text-xs text-gray-400">${formatDate(e.date)}</span>
+        </div>
+      </div>
+      <div class="px-6 py-5 flex-1">
+        <pre class="text-sm text-gray-700 leading-relaxed font-sans">${e.body || '(empty)'}</pre>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-100 bg-gray-50">
+        <button onclick="replyTo('${(e.from||'').replace(/'/g,"\\'")}', '${(e.subject||'').replace(/'/g,"\\'")}') "
+          class="text-sm text-blue-600 hover:underline flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 0 1 8 8v2M3 10l6 6m-6-6 6-6"/>
+          </svg>
+          Reply
+        </button>
+      </div>
+    `;
+  } catch (e) {
+    detail.innerHTML = `<div class="p-6 text-sm text-red-500">${e.message}</div>`;
+  }
+}
+
+function replyTo(from, subject) {
+  document.getElementById('composeTo').value = from.match(/<(.+)>/) ? from.match(/<(.+)>/)[1] : from;
+  document.getElementById('composeSubject').value = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
+  openCompose();
+}
+
+// ============================================================
+// Search
+// ============================================================
+async function runSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+  const type = document.getElementById('searchType').value;
+  showPage('emails');
+  document.getElementById('listTitle').textContent = 'Search Results';
+  document.getElementById('listSubtitle').textContent = `"${q}"`;
+  currentView = { type: 'search', q, searchType: type };
+  setLoading(true);
+  try {
+    const max = document.getElementById('maxResults').value;
+    let url;
+    if (type === 'sender') url = `/api/emails/from?sender=${encodeURIComponent(q)}&max_results=${max}`;
+    else if (type === 'subject') url = `/api/emails/by-subject?subject=${encodeURIComponent(q)}&max_results=${max}`;
+    else url = `/api/emails/search?query=${encodeURIComponent(q)}&max_results=${max}`;
+    const data = await apiFetch(url);
+    renderEmailList(data.emails, `${data.count} result${data.count !== 1 ? 's' : ''}`);
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally { setLoading(false); }
+}
+
+document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
+
+// ============================================================
+// Compose
+// ============================================================
+function openCompose() {
+  document.getElementById('composeModal').classList.remove('hidden');
+  document.getElementById('composeTo').focus();
+}
+function closeCompose() {
+  document.getElementById('composeModal').classList.add('hidden');
+}
+
+async function sendEmail() {
+  const to = document.getElementById('composeTo').value.trim();
+  const subject = document.getElementById('composeSubject').value.trim();
+  const body = document.getElementById('composeBody').value.trim();
+  const html = document.getElementById('composeHtml').checked;
+  if (!to || !subject || !body) { showToast('Fill in all fields', 'error'); return; }
+  try {
+    await apiFetch('/api/emails/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient: to, subject, body, html }),
+    });
+    showToast('Email sent!', 'success');
+    closeCompose();
+    document.getElementById('composeTo').value = '';
+    document.getElementById('composeSubject').value = '';
+    document.getElementById('composeBody').value = '';
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+// ============================================================
+// MCP Tools page
+// ============================================================
+const TOOL_CONFIGS = [
+  {
+    name: 'list_emails',
+    icon: '📋',
+    color: 'blue',
+    description: 'List emails from any mailbox folder',
+    fields: [
+      { id: 'folder', label: 'Folder', type: 'text', default: 'INBOX' },
+      { id: 'max_results', label: 'Max Results', type: 'number', default: '10' },
+      { id: 'unread_only', label: 'Unread Only', type: 'checkbox', default: false },
+    ],
+    run: async (vals) => apiFetch(`/api/emails?folder=${encodeURIComponent(vals.folder||'INBOX')}&max_results=${vals.max_results||10}&unread_only=${vals.unread_only||false}`),
+  },
+  {
+    name: 'get_unread_emails',
+    icon: '📬',
+    color: 'yellow',
+    description: 'Fetch only unread emails from a folder',
+    fields: [
+      { id: 'folder', label: 'Folder', type: 'text', default: 'INBOX' },
+      { id: 'max_results', label: 'Max Results', type: 'number', default: '10' },
+    ],
+    run: async (vals) => apiFetch(`/api/emails/unread?folder=${encodeURIComponent(vals.folder||'INBOX')}&max_results=${vals.max_results||10}`),
+  },
+  {
+    name: 'get_emails_from_sender',
+    icon: '👤',
+    color: 'green',
+    description: 'Retrieve all emails from a specific sender',
+    fields: [
+      { id: 'sender', label: 'Sender Email', type: 'email', placeholder: 'user@example.com' },
+      { id: 'folder', label: 'Folder', type: 'text', default: 'INBOX' },
+      { id: 'max_results', label: 'Max Results', type: 'number', default: '10' },
+    ],
+    run: async (vals) => apiFetch(`/api/emails/from?sender=${encodeURIComponent(vals.sender)}&folder=${encodeURIComponent(vals.folder||'INBOX')}&max_results=${vals.max_results||10}`),
+  },
+  {
+    name: 'get_emails_by_subject',
+    icon: '🔤',
+    color: 'orange',
+    description: 'Find emails matching a subject keyword',
+    fields: [
+      { id: 'subject', label: 'Subject Keyword', type: 'text', placeholder: 'e.g. invoice' },
+      { id: 'folder', label: 'Folder', type: 'text', default: 'INBOX' },
+      { id: 'max_results', label: 'Max Results', type: 'number', default: '10' },
+    ],
+    run: async (vals) => apiFetch(`/api/emails/by-subject?subject=${encodeURIComponent(vals.subject)}&folder=${encodeURIComponent(vals.folder||'INBOX')}&max_results=${vals.max_results||10}`),
+  },
+  {
+    name: 'search_emails',
+    icon: '🔍',
+    color: 'purple',
+    description: 'Search with raw IMAP criteria (UNSEEN, FROM "x@y", SUBJECT "z")',
+    fields: [
+      { id: 'query', label: 'IMAP Query', type: 'text', placeholder: 'e.g. UNSEEN or SUBJECT "invoice"' },
+      { id: 'folder', label: 'Folder', type: 'text', default: 'INBOX' },
+      { id: 'max_results', label: 'Max Results', type: 'number', default: '10' },
+    ],
+    run: async (vals) => apiFetch(`/api/emails/search?query=${encodeURIComponent(vals.query)}&folder=${encodeURIComponent(vals.folder||'INBOX')}&max_results=${vals.max_results||10}`),
+  },
+  {
+    name: 'get_email_details',
+    icon: '📄',
+    color: 'teal',
+    description: 'Get the full content of a single email by its IMAP ID',
+    fields: [
+      { id: 'message_id', label: 'Message ID', type: 'text', placeholder: 'e.g. 42' },
+    ],
+    run: async (vals) => apiFetch(`/api/emails/${encodeURIComponent(vals.message_id)}`),
+  },
+  {
+    name: 'list_folders',
+    icon: '📁',
+    color: 'gray',
+    description: 'List all available mailbox folders',
+    fields: [],
+    run: async () => apiFetch('/api/folders'),
+  },
+  {
+    name: 'send_email',
+    icon: '📤',
+    color: 'red',
+    description: 'Compose and send an email (plain-text or HTML)',
+    fields: [
+      { id: 'recipient', label: 'To', type: 'email', placeholder: 'recipient@example.com' },
+      { id: 'subject', label: 'Subject', type: 'text' },
+      { id: 'body', label: 'Body', type: 'textarea' },
+      { id: 'html', label: 'HTML body', type: 'checkbox', default: false },
+    ],
+    run: async (vals) => apiFetch('/api/emails/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient: vals.recipient, subject: vals.subject, body: vals.body, html: vals.html || false }),
+    }),
+  },
+];
+
+const COLOR_MAP = {
+  blue: 'bg-blue-50 border-blue-200 text-blue-700',
+  yellow: 'bg-yellow-50 border-yellow-200 text-yellow-700',
+  green: 'bg-green-50 border-green-200 text-green-700',
+  orange: 'bg-orange-50 border-orange-200 text-orange-700',
+  purple: 'bg-purple-50 border-purple-200 text-purple-700',
+  teal: 'bg-teal-50 border-teal-200 text-teal-700',
+  gray: 'bg-gray-50 border-gray-200 text-gray-700',
+  red: 'bg-red-50 border-red-200 text-red-700',
+};
+
+function loadToolsPage() {
+  const grid = document.getElementById('toolsGrid');
+  grid.innerHTML = TOOL_CONFIGS.map((t, i) => `
+    <div class="tool-card bg-white rounded-2xl border ${COLOR_MAP[t.color].split(' ').slice(1).join(' ')} p-5 cursor-pointer" onclick="openTool(${i})">
+      <div class="flex items-start gap-3">
+        <span class="text-2xl">${t.icon}</span>
+        <div class="flex-1 min-w-0">
+          <h3 class="font-semibold text-gray-800 text-sm">${t.name}</h3>
+          <p class="text-xs text-gray-500 mt-0.5 leading-relaxed">${t.description}</p>
+        </div>
+        <svg class="w-4 h-4 text-gray-300 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+      </div>
+      ${t.fields.length > 0 ? `<div class="mt-3 flex flex-wrap gap-1">${t.fields.map(f => `<span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">${f.id}</span>`).join('')}</div>` : '<div class="mt-3 text-xs text-gray-400">No parameters</div>'}
+    </div>
+  `).join('');
+
+  // Load status
+  apiFetch('/api/status').then(s => {
+    document.getElementById('statusJson').textContent = JSON.stringify(s, null, 2);
+  }).catch(e => {
+    document.getElementById('statusJson').textContent = `Error: ${e.message}`;
+  });
+}
+
+// ============================================================
+// Tool Playground Modal
+// ============================================================
+let activeTool = null;
+
+function openTool(index) {
+  activeTool = TOOL_CONFIGS[index];
+  document.getElementById('modalTitle').textContent = `${activeTool.icon} ${activeTool.name}`;
+  document.getElementById('modalDesc').textContent = activeTool.description;
+
+  const body = document.getElementById('modalBody');
+  body.innerHTML = activeTool.fields.map(f => {
+    if (f.type === 'checkbox') return `
+      <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+        <input type="checkbox" id="mf_${f.id}" ${f.default ? 'checked' : ''} class="rounded" />
+        ${f.label}
+      </label>`;
+    if (f.type === 'textarea') return `
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">${f.label}</label>
+        <textarea id="mf_${f.id}" rows="4" placeholder="${f.placeholder||''}"
+          class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100 resize-none"></textarea>
+      </div>`;
+    return `
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">${f.label}</label>
+        <input type="${f.type}" id="mf_${f.id}" value="${f.default||''}" placeholder="${f.placeholder||f.default||''}"
+          class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
+      </div>`;
+  }).join('');
+
+  if (activeTool.fields.length === 0) {
+    body.innerHTML = '<p class="text-sm text-gray-500">This tool requires no parameters.</p>';
+  }
+
+  // Result area
+  body.innerHTML += `
+    <div id="toolResult" class="hidden mt-2">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-xs font-medium text-gray-500">Result</span>
+        <button onclick="document.getElementById('toolResult').classList.add('hidden')" class="text-xs text-gray-400 hover:text-gray-600">clear</button>
+      </div>
+      <pre id="toolResultPre" class="bg-gray-50 rounded-xl p-3 text-xs text-gray-700 overflow-auto max-h-52"></pre>
+    </div>`;
+
+  document.getElementById('modalRunBtn').onclick = runActiveTool;
+  document.getElementById('toolModal').classList.remove('hidden');
+}
+
+function closeToolModal() {
+  document.getElementById('toolModal').classList.add('hidden');
+  activeTool = null;
+}
+
+async function runActiveTool() {
+  if (!activeTool) return;
+  const btn = document.getElementById('modalRunBtn');
+  btn.textContent = 'Running…';
+  btn.disabled = true;
+
+  const vals = {};
+  activeTool.fields.forEach(f => {
+    const el = document.getElementById(`mf_${f.id}`);
+    if (!el) return;
+    if (f.type === 'checkbox') vals[f.id] = el.checked;
+    else vals[f.id] = el.value;
+  });
+
+  try {
+    const result = await activeTool.run(vals);
+    const resultEl = document.getElementById('toolResult');
+    const pre = document.getElementById('toolResultPre');
+    pre.textContent = JSON.stringify(result, null, 2);
+    resultEl.classList.remove('hidden');
+    showToast('Tool executed successfully', 'success');
+  } catch (e) {
+    const resultEl = document.getElementById('toolResult');
+    const pre = document.getElementById('toolResultPre');
+    pre.textContent = `Error: ${e.message}`;
+    resultEl.classList.remove('hidden');
+    showToast(e.message, 'error');
+  } finally {
+    btn.textContent = 'Run';
+    btn.disabled = false;
+  }
+}
+
+// ============================================================
+// AI Chat
+// ============================================================
+let chatSessionId = null;
+let chatBusy = false;
+
+async function initChatSession() {
+  try {
+    const res = await apiFetch('/api/chat/session', { method: 'POST' });
+    chatSessionId = res.session_id;
+  } catch (e) {
+    console.warn('Chat session init failed:', e.message);
+  }
+}
+
+function toggleChat() {
+  const panel = document.getElementById('chatPanel');
+  panel.classList.toggle('open');
+}
+
+function clearChat() {
+  document.getElementById('chatMessages').innerHTML = '';
+  document.getElementById('chatWelcome') && rebuildWelcome();
+  initChatSession();
+}
+
+function rebuildWelcome() {
+  const msgs = document.getElementById('chatMessages');
+  msgs.innerHTML = `
+    <div id="chatWelcome" class="chat-welcome flex flex-col">
+      <div class="w-14 h-14 rounded-full bg-purple-100 flex items-center justify-center mx-auto">
+        <svg class="w-7 h-7 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+        </svg>
+      </div>
+      <p class="text-sm font-semibold text-gray-700 mt-3">Ask me anything about your emails</p>
+      <p class="text-xs text-gray-400 mt-1">I can read, search, and send emails for you.</p>
+      <div class="mt-4 flex flex-col gap-2 w-full">
+        <button onclick="quickPrompt('Show my unread emails')" class="text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-gray-600 transition">📬 Show my unread emails</button>
+        <button onclick="quickPrompt('List emails from the last week')" class="text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-gray-600 transition">📅 List emails from the last week</button>
+        <button onclick="quickPrompt('What folders do I have?')" class="text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-gray-600 transition">📁 What folders do I have?</button>
+        <button onclick="quickPrompt('Search for emails about invoice')" class="text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-gray-600 transition">🔍 Search for emails about invoice</button>
+      </div>
+    </div>`;
+}
+
+function autoResizeChatInput(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function quickPrompt(text) {
+  document.getElementById('chatInput').value = text;
+  sendChatMessage();
+}
+
+function appendUserBubble(text) {
+  const welcome = document.getElementById('chatWelcome');
+  if (welcome) welcome.remove();
+  const msgs = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'chat-bubble-user';
+  div.textContent = text;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function createAiBubble() {
+  const msgs = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'chat-bubble-ai streaming';
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+function appendToolChip(name, done = false) {
+  const msgs = document.getElementById('chatMessages');
+  const chip = document.createElement('div');
+  chip.className = `tool-chip ${done ? 'done' : ''}`;
+  chip.id = `chip-${name}-${Date.now()}`;
+  chip.innerHTML = done
+    ? `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> ${name}`
+    : `<svg class="w-3 h-3 spinner" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 0 1-15.357-2m15.357 2H15"/></svg> Calling ${name}…`;
+  msgs.appendChild(chip);
+  msgs.scrollTop = msgs.scrollHeight;
+  return chip;
+}
+
+async function sendChatMessage() {
+  if (chatBusy) return;
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  if (!chatSessionId) {
+    showToast('Chat session not ready. Retrying…', 'error');
+    await initChatSession();
+    if (!chatSessionId) return;
+  }
+
+  input.value = '';
+  input.style.height = 'auto';
+  chatBusy = true;
+  document.getElementById('chatSendBtn').disabled = true;
+
+  appendUserBubble(text);
+  const aiBubble = createAiBubble();
+
+  // Open panel if closed
+  document.getElementById('chatPanel').classList.add('open');
+
+  let activeToolChips = {};
+
+  try {
+    const res = await fetch(`/api/chat/${chatSessionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+
+      const lines = buf.split('\n');
+      buf = lines.pop();   // keep incomplete line
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (evt.type === 'text') {
+          aiBubble.textContent += evt.text;
+          document.getElementById('chatMessages').scrollTop = 9999;
+        } else if (evt.type === 'tool_call') {
+          const chip = appendToolChip(evt.name, false);
+          activeToolChips[evt.name] = chip;
+        } else if (evt.type === 'tool_result') {
+          const chip = activeToolChips[evt.name];
+          if (chip) {
+            chip.className = 'tool-chip done';
+            chip.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> ${evt.name}`;
+          }
+        } else if (evt.type === 'error') {
+          aiBubble.textContent = `Error: ${evt.text}`;
+          aiBubble.style.background = '#fce8e6';
+          aiBubble.style.color = '#c5221f';
+        } else if (evt.type === 'done') {
+          aiBubble.classList.remove('streaming');
+        }
+      }
+    }
+  } catch (e) {
+    aiBubble.textContent = `Error: ${e.message}`;
+    aiBubble.classList.remove('streaming');
+    aiBubble.style.background = '#fce8e6';
+    aiBubble.style.color = '#c5221f';
+    showToast(e.message, 'error');
+  } finally {
+    aiBubble.classList.remove('streaming');
+    chatBusy = false;
+    document.getElementById('chatSendBtn').disabled = false;
+    document.getElementById('chatInput').focus();
+  }
+}
+
+// ============================================================
+// Init
+// ============================================================
+async function init() {
+  await checkStatus();
+  loadFolders();
+  loadEmails('INBOX', false);
+  initChatSession();
+}
+
+init();
+</script>
+</body>
+</html>

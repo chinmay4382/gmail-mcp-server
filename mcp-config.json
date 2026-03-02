@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "email": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "--env-file", "/home/chinmay/Desktop/mcp/gmail-server/.env",
+        "email-mcp-server:latest"
+      ]
+    }
+  }
+}
