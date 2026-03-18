@@ -59,11 +59,29 @@ EMAIL_PASSWORD=your_app_password_or_password
 
 ### 5. Run the Server
 
+**Option A — MCP server (for use with Claude Desktop / MCP clients):**
+
 ```bash
 docker run --env-file .env gmail-mcp-server
 ```
 
 The server will start and be ready to use with Claude or other MCP clients.
+
+**Option B — Web UI (standalone browser app):**
+
+```bash
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Copy and fill in your credentials
+cp .env.example .env
+# Edit .env with your email credentials and Anthropic API key
+
+# Start the API + UI server
+uvicorn api_server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Then open http://localhost:8000 in your browser.
 
 ## Available Tools
 
