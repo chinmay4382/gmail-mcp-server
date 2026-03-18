@@ -6,6 +6,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
 import ssl
+import threading
 from typing import Optional, List
 from datetime import datetime
 
@@ -32,8 +33,15 @@ class EmailClient:
         self.imap_port = imap_port
         self.smtp_port = smtp_port
         self.imap_connection = None
+        self._lock = threading.RLock()
         self._connect_imap()
     
+    def _select_folder(self, folder: str):
+        """Select an IMAP folder, quoting names that contain spaces."""
+        if ' ' in folder:
+            folder = f'"{folder}"'
+        return self.imap_connection.select(folder)
+
     def _connect_imap(self):
         """Connect to IMAP server."""
         try:
@@ -44,66 +52,72 @@ class EmailClient:
     
     def list_emails(self, folder: str = 'INBOX', max_results: int = 10, unread_only: bool = False) -> List[dict]:
         """List emails from a folder.
-        
+
         Args:
             folder: Mailbox folder name (default: INBOX)
             max_results: Maximum number of emails to retrieve
             unread_only: If True, only return unread emails
-            
+
         Returns:
             List of email dictionaries with subject, from, date, and preview
         """
-        try:
-            self.imap_connection.select(folder)
-            
-            # Search for emails
-            search_criteria = 'UNSEEN' if unread_only else 'ALL'
-            _, email_ids = self.imap_connection.search(None, search_criteria)
-            
-            # Get latest emails (reverse order)
-            email_list = email_ids[0].split()[-max_results:][::-1]
-            
-            emails = []
-            for email_id in email_list:
-                email_data = self.get_email(email_id.decode())
-                if email_data:
-                    emails.append(email_data)
-            
-            return emails
-        except Exception as e:
-            raise Exception(f"Error listing emails: {str(e)}")
+        with self._lock:
+            try:
+                status, _ = self._select_folder(folder)
+                if status != 'OK':
+                    raise Exception(f"Cannot select folder: {folder}")
+
+                search_criteria = 'UNSEEN' if unread_only else 'ALL'
+                _, email_ids = self.imap_connection.search(None, search_criteria)
+
+                email_list = email_ids[0].split()[-max_results:][::-1]
+
+                emails = []
+                for email_id in email_list:
+                    email_data = self.get_email(email_id.decode(), folder=folder)
+                    if email_data:
+                        emails.append(email_data)
+
+                return emails
+            except Exception as e:
+                raise Exception(f"Error listing emails: {str(e)}")
     
-    def get_email(self, email_id: str) -> Optional[dict]:
+    def get_email(self, email_id: str, folder: str = 'INBOX') -> Optional[dict]:
         """Get full email details.
-        
+
         Args:
             email_id: Email ID from IMAP
-            
+            folder: Mailbox folder the email is in
+
         Returns:
             Dictionary containing email details
         """
-        try:
-            _, msg_data = self.imap_connection.fetch(email_id, '(RFC822)')
-            msg = email.message_from_bytes(msg_data[0][1])
-            
-            # Extract headers
-            subject = msg.get('Subject', 'No Subject')
-            sender = msg.get('From', 'Unknown')
-            date = msg.get('Date', 'Unknown')
-            
-            # Extract body
-            body = self._get_body(msg)
-            
-            return {
-                'id': email_id,
-                'subject': subject,
-                'from': sender,
-                'date': date,
-                'body': body[:500] + '...' if len(body) > 500 else body
-            }
-        except Exception as e:
-            print(f"Error getting email {email_id}: {str(e)}")
-            return None
+        with self._lock:
+            try:
+                status, _ = self._select_folder(folder)
+                if status != 'OK':
+                    return None
+                _, msg_data = self.imap_connection.fetch(email_id, '(RFC822)')
+                raw = next((part[1] for part in msg_data if isinstance(part, tuple)), None)
+                if not raw:
+                    return None
+                msg = email.message_from_bytes(raw)
+
+                subject = msg.get('Subject', 'No Subject')
+                sender = msg.get('From', 'Unknown')
+                date = msg.get('Date', 'Unknown')
+                body = self._get_body(msg)
+
+                return {
+                    'id': email_id,
+                    'subject': subject,
+                    'from': sender,
+                    'date': date,
+                    'body': body[:500] + '...' if len(body) > 500 else body
+                }
+            except Exception as e:
+                print(f"Error getting email {email_id}: {str(e)}")
+                return None
     
     def _get_body(self, msg: email.message.Message) -> str:
         """Extract body from email message.
@@ -143,22 +157,24 @@ class EmailClient:
         Returns:
             List of matching emails
         """
-        try:
-            self.imap_connection.select(folder)
-            _, email_ids = self.imap_connection.search(None, query)
-            
-            # Get latest matching emails
-            email_list = email_ids[0].split()[-max_results:][::-1]
-            
-            emails = []
-            for email_id in email_list:
-                email_data = self.get_email(email_id.decode())
-                if email_data:
-                    emails.append(email_data)
-            
-            return emails
-        except Exception as e:
-            raise Exception(f"Error searching emails: {str(e)}")
+        with self._lock:
+            try:
+                status, _ = self._select_folder(folder)
+                if status != 'OK':
+                    raise Exception(f"Cannot select folder: {folder}")
+                _, email_ids = self.imap_connection.search(None, query)
+
+                email_list = email_ids[0].split()[-max_results:][::-1]
+
+                emails = []
+                for email_id in email_list:
+                    email_data = self.get_email(email_id.decode(), folder=folder)
+                    if email_data:
+                        emails.append(email_data)
+
+                return emails
+            except Exception as e:
+                raise Exception(f"Error searching emails: {str(e)}")
     
     def get_unread_emails(self, folder: str = 'INBOX', max_results: int = 10) -> List[dict]:
         """Get unread emails.
@@ -204,18 +220,21 @@ class EmailClient:
         Returns:
             List of folder names
         """
-        try:
-            _, folders = self.imap_connection.list()
-            folder_list = []
-            for folder in folders:
-                # Parse folder name from response
-                parts = folder.decode().split(' "/" ')
-                if len(parts) > 1:
-                    folder_name = parts[1].strip('"')
-                    folder_list.append(folder_name)
-            return folder_list
-        except Exception as e:
-            raise Exception(f"Error listing folders: {str(e)}")
+        with self._lock:
+            try:
+                _, folders = self.imap_connection.list()
+                folder_list = []
+                for folder in folders:
+                    decoded = folder.decode()
+                    if r'\Noselect' in decoded:
+                        continue
+                    parts = decoded.split(' "/" ')
+                    if len(parts) > 1:
+                        folder_name = parts[1].strip('"')
+                        folder_list.append(folder_name)
+                return folder_list
+            except Exception as e:
+                raise Exception(f"Error listing folders: {str(e)}")
     
     def send_email(self, recipient: str, subject: str, body: str, html: bool = False) -> bool:
         """Send an email.
@@ -255,5 +274,8 @@ class EmailClient:
     def close(self):
         """Close IMAP connection."""
         if self.imap_connection:
-            self.imap_connection.close()
+            try:
+                self.imap_connection.close()
+            except Exception:
+                pass
             self.imap_connection.logout()

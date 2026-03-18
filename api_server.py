@@ -278,7 +278,7 @@ def get_emails_by_subject(
 def get_email_details(message_id: str):
     """Get full details of a specific email by IMAP message ID."""
     try:
-        email_data = get_client().get_email(message_id=message_id)
+        email_data = get_client().get_email(email_id=message_id)
         if not email_data:
             raise HTTPException(status_code=404, detail="Email not found")
         return email_data
@@ -507,7 +507,7 @@ async def chat(session_id: str, payload: ChatMessageRequest):
         while True:
             try:
                 async with claude.messages.stream(
-                    model="claude-opus-4-6",
+                    model="claude-sonnet-4-6",
                     max_tokens=4096,
                     system=_CHAT_SYSTEM,
                     tools=_EMAIL_TOOLS,
