@@ -1,12 +1,16 @@
 {
   "mcpServers": {
     "email": {
-      "command": "docker",
+      "command": "python3.12",
       "args": [
-        "run", "--rm", "-i",
-        "--env-file", "/home/chinmay/Desktop/mcp/gmail-server/.env",
-        "email-mcp-server:latest"
-      ]
+        "${MCP_SERVER_PATH}"
+      ],
+      "env": {
+        "EMAIL_ADDRESS": "${EMAIL_ADDRESS}",
+        "EMAIL_PASSWORD": "${EMAIL_PASSWORD}",
+        "IMAP_SERVER": "${IMAP_SERVER}",
+        "SMTP_SERVER": "${SMTP_SERVER}"
+      }
     }
   }
 }

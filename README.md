@@ -17,7 +17,7 @@ An MCP (Model Context Protocol) server for reading and sending emails via IMAP/S
 
 ## Prerequisites
 
-- Python 3.10 or higher
+- Docker installed on your system
 - An email account (Gmail, Outlook, etc.) with IMAP/SMTP enabled
 
 ## Quick Start
@@ -38,19 +38,15 @@ An MCP (Model Context Protocol) server for reading and sending emails via IMAP/S
 
 ```bash
 # Clone or navigate to the server directory
-cd gmail-server
+cd gmail-mcp-server
 
-# Install dependencies
-pip install -r requirements.txt
-# or
-pip install -e .
+# Build the Docker image
+docker build -t gmail-mcp-server .
 ```
 
 ### 4. Configuration
 
-Create a `.env` file in the project directory:
-
-Edit `.env` with your email credentials:
+Create a `.env` file in the project directory with your email credentials:
 
 ```
 EMAIL_ADDRESS=your_email@gmail.com
@@ -64,7 +60,7 @@ EMAIL_PASSWORD=your_app_password_or_password
 ### 5. Run the Server
 
 ```bash
-python gmail_mcp_server.py
+docker run --env-file .env gmail-mcp-server
 ```
 
 The server will start and be ready to use with Claude or other MCP clients.
@@ -183,7 +179,7 @@ You can use this MCP server with Claude by adding it to your Claude configuratio
 - The server uses SSL certificates for secure connections
 
 ### "No module named 'mcp'"
-- Run: `pip install -r requirements.txt`
+- Rebuild the Docker image: `docker build -t gmail-mcp-server .`
 
 ## Security Notes
 
@@ -196,9 +192,10 @@ You can use this MCP server with Claude by adding it to your Claude configuratio
 ## File Structure
 
 ```
-gmail-server/
+gmail-mcp-server/
 ├── gmail_mcp_server.py      # Main MCP server implementation
 ├── gmail_client.py          # IMAP/SMTP email client wrapper
+├── Dockerfile               # Docker build configuration
 ├── pyproject.toml           # Project configuration
 ├── requirements.txt         # Python dependencies
 ├── .env.example             # Example environment variables
