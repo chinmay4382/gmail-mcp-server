@@ -204,8 +204,8 @@
 
 <!-- ===== AI CHAT PANEL ===== -->
 <div id="chatPanel">
-  <!-- Header -->
-  <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
+  <!-- Header / drag handle -->
+  <div class="chat-drag-handle flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0 rounded-t-2xl">
     <div class="flex items-center gap-2">
       <div class="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center">
         <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -219,6 +219,11 @@
       </div>
     </div>
     <div class="flex items-center gap-1">
+      <button id="chatExpandBtn" onclick="toggleExpandChat()" class="p-1.5 hover:bg-gray-100 rounded-full text-gray-400" title="Expand">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+        </svg>
+      </button>
       <button onclick="clearChat()" class="p-1.5 hover:bg-gray-100 rounded-full text-gray-400" title="Clear chat">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16"/>
@@ -230,6 +235,15 @@
         </svg>
       </button>
     </div>
+  </div>
+
+  <!-- Resize grip -->
+  <div id="chatResizeHandle">
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" class="text-gray-400">
+      <path d="M9 1L1 9M9 5L5 9M9 9H9"/>
+      <circle cx="9" cy="3" r="1"/><circle cx="7" cy="7" r="1"/><circle cx="3" cy="9" r="1"/>
+      <circle cx="9" cy="7" r="1"/><circle cx="7" cy="9" r="1"/><circle cx="9" cy="9" r="1"/>
+    </svg>
   </div>
 
   <!-- Messages -->
