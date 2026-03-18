@@ -566,6 +566,84 @@ function toggleChat() {
   panel.classList.toggle('open');
 }
 
+const CHAT_DEFAULT = { width: 380, height: 560 };
+let chatExpanded = false;
+
+function toggleExpandChat() {
+  const panel = document.getElementById('chatPanel');
+  const btn = document.getElementById('chatExpandBtn');
+  chatExpanded = !chatExpanded;
+  if (chatExpanded) {
+    panel.style.width  = Math.min(720, window.innerWidth  - 48) + 'px';
+    panel.style.height = Math.min(800, window.innerHeight - 100) + 'px';
+    // Re-clamp position so panel stays on screen
+    const rect = panel.getBoundingClientRect();
+    if (rect.right  > window.innerWidth)  panel.style.left = Math.max(0, window.innerWidth  - panel.offsetWidth  - 24) + 'px';
+    if (rect.bottom > window.innerHeight) panel.style.top  = Math.max(0, window.innerHeight - panel.offsetHeight - 24) + 'px';
+    panel.style.right = 'auto';
+    btn.title = 'Restore';
+    btn.querySelector('path').setAttribute('d', 'M9 9L15 3M15 3h-4m4 0v4M3 15l6-6M3 15h4m-4 0v-4');
+  } else {
+    panel.style.width  = CHAT_DEFAULT.width  + 'px';
+    panel.style.height = CHAT_DEFAULT.height + 'px';
+    btn.title = 'Expand';
+    btn.querySelector('path').setAttribute('d', 'M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5');
+  }
+}
+
+function initDraggable() {
+  const panel = document.getElementById('chatPanel');
+  const handle = panel.querySelector('.chat-drag-handle');
+  const resizeGrip = document.getElementById('chatResizeHandle');
+
+  // ── Drag ──
+  let dragging = false, ox = 0, oy = 0;
+  handle.addEventListener('mousedown', e => {
+    if (e.target.closest('button')) return;
+    dragging = true;
+    const rect = panel.getBoundingClientRect();
+    ox = e.clientX - rect.left;
+    oy = e.clientY - rect.top;
+    panel.style.transition = 'none';
+    e.preventDefault();
+  });
+
+  // ── Resize ──
+  let resizing = false, startX = 0, startY = 0, startW = 0, startH = 0;
+  resizeGrip.addEventListener('mousedown', e => {
+    resizing = true;
+    startX = e.clientX; startY = e.clientY;
+    startW = panel.offsetWidth; startH = panel.offsetHeight;
+    panel.style.transition = 'none';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (dragging) {
+      let x = e.clientX - ox;
+      let y = e.clientY - oy;
+      x = Math.max(0, Math.min(window.innerWidth  - panel.offsetWidth,  x));
+      y = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, y));
+      panel.style.left  = x + 'px';
+      panel.style.top   = y + 'px';
+      panel.style.right = 'auto';
+    }
+    if (resizing) {
+      const w = Math.max(320, Math.min(window.innerWidth  - panel.offsetLeft - 8, startW + e.clientX - startX));
+      const h = Math.max(300, Math.min(window.innerHeight - panel.offsetTop  - 8, startH + e.clientY - startY));
+      panel.style.width  = w + 'px';
+      panel.style.height = h + 'px';
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (dragging || resizing) {
+      dragging = resizing = false;
+      panel.style.transition = '';
+    }
+  });
+}
+
 function clearChat() {
   document.getElementById('chatMessages').innerHTML = '';
   rebuildWelcome();
@@ -733,6 +811,7 @@ async function init() {
   // loadFolders removed — only Inbox shown in sidebar
   loadEmails('INBOX', false);
   initChatSession();
+  initDraggable();
 }
 
 init();
