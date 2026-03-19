@@ -57,6 +57,11 @@ pre { white-space: pre-wrap; word-break: break-word; }
 .chat-bubble-ai.streaming::after {
   content: '▋'; animation: blink 0.7s step-start infinite; margin-left: 2px;
 }
+.chat-bubble-ai ul { margin: 4px 0; padding-left: 18px; list-style: disc; }
+.chat-bubble-ai li { margin: 2px 0; }
+.chat-bubble-ai strong { font-weight: 600; }
+.chat-bubble-ai code { background: #e8eaed; padding: 1px 5px; border-radius: 3px; font-size: 0.88em; font-family: monospace; }
+.chat-bubble-ai pre { background: #f1f3f4; border-radius: 6px; padding: 8px 10px; font-size: 12px; overflow-x: auto; margin: 4px 0; }
 @keyframes blink { 50% { opacity: 0; } }
 .tool-chip {
   display: inline-flex; align-items: center; gap: 5px;
