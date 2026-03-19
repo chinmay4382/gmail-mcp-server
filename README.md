@@ -1,89 +1,68 @@
-# Email MCP Server
+# Gmail MCP Server
 
-![Email MCP Server](Email_mcp.png)
+![Gmail MCP Server](Email_mcp.png)
 
-An MCP (Model Context Protocol) server for reading and sending emails via IMAP/SMTP. This server exposes email operations as MCP tools that can be used by Claude and other AI models. Works with Gmail, Outlook, and any email provider that supports IMAP/SMTP.
+An MCP (Model Context Protocol) server for reading and sending Gmail via IMAP/SMTP. Exposes Gmail operations as MCP tools usable by Claude and other AI models, and includes a web UI for managing your inbox directly in the browser.
 
 ## Features
 
-- **List Emails**: Retrieve emails from any mailbox folder
+- **List Emails**: Retrieve emails from any Gmail folder
 - **Get Unread Emails**: Fetch only unread messages
-- **Search Emails**: Search with IMAP search criteria (e.g., by sender, date, subject)
+- **Search Emails**: Search with IMAP search criteria (by sender, date, subject, etc.)
 - **Get Emails from Sender**: Retrieve all emails from a specific sender
 - **Get Emails by Subject**: Search by subject text
 - **Send Emails**: Compose and send emails via SMTP
-- **List Folders**: View all available mailbox folders
+- **List Folders**: View all available Gmail folders
 - **Get Email Details**: Fetch complete details of a specific email
 
 ## Prerequisites
 
 - Docker installed on your system
-- An email account (Gmail, Outlook, etc.) with IMAP/SMTP enabled
+- A Gmail account with IMAP enabled and an App Password generated
 
 ## Quick Start
 
-### 1. For Gmail Users
+### 1. Enable Gmail IMAP and generate an App Password
 
-1. Enable 2-Factor Authentication in your Gmail account: https://myaccount.google.com/security
-2. Generate an "App Password" for Mail: https://myaccount.google.com/apppasswords
-3. Use your Gmail address and the generated app password
+1. Enable 2-Factor Authentication: https://myaccount.google.com/security
+2. Generate an App Password for Mail: https://myaccount.google.com/apppasswords
+3. Note your Gmail address and the generated app password — you'll need them below
 
-### 2. For Other Email Providers
-
-- **Outlook**: Use your Microsoft account password (or create app password if 2FA enabled)
-- **Yahoo**: Generate an "App Password": https://login.yahoo.com/account/security
-- **Other providers**: Consult your provider's IMAP/SMTP documentation
-
-### 3. Installation
+### 2. Clone and configure
 
 ```bash
-# Clone or navigate to the server directory
+git clone https://github.com/chinmay4382/gmail-mcp-server.git
 cd gmail-mcp-server
-
-# Build the Docker image
-docker build -t gmail-mcp-server .
+cp .env.example .env
 ```
 
-### 4. Configuration
-
-Create a `.env` file in the project directory with your email credentials:
+Edit `.env` with your credentials:
 
 ```
 EMAIL_ADDRESS=your_email@gmail.com
-EMAIL_PASSWORD=your_app_password_or_password
-
-# Optional: Custom IMAP/SMTP servers
-# IMAP_SERVER=imap.gmail.com
-# SMTP_SERVER=smtp.gmail.com
+EMAIL_PASSWORD=your_app_password
+IMAP_SERVER=imap.gmail.com
+SMTP_SERVER=smtp.gmail.com
+ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
-### 5. Run the Server
+### 3. Run with Docker
 
-**Option A — MCP server (for use with Claude Desktop / MCP clients):**
-
-```bash
-docker run --env-file .env gmail-mcp-server
-```
-
-The server will start and be ready to use with Claude or other MCP clients.
-
-**Option B — Web UI (standalone browser app):**
+**Option A — Web UI (browser app):**
 
 ```bash
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Copy and fill in your credentials
-cp .env.example .env
-# Edit .env with your email credentials and Anthropic API key
-
-# Start the API + UI server
-uvicorn api_server:app --host 0.0.0.0 --port 8000 --reload
+docker compose up email-ui
 ```
 
 Then open http://localhost:8000 in your browser.
 
-## Available Tools
+**Option B — MCP server (for Claude Desktop / MCP clients):**
+
+```bash
+docker compose up email-mcp-server
+```
+
+## Available MCP Tools
 
 ### list_emails
 List emails from a folder.
@@ -91,19 +70,14 @@ List emails from a folder.
 **Parameters:**
 - `max_results` (int, default: 10): Number of emails to retrieve
 - `unread_only` (bool, default: false): Only return unread emails
-- `folder` (string, default: "INBOX"): Mailbox folder name
-
-**Example:**
-```
-list_emails(max_results=20, unread_only=true, folder="INBOX")
-```
+- `folder` (string, default: "INBOX"): Gmail folder name
 
 ### get_unread_emails
 Get unread emails from a folder.
 
 **Parameters:**
 - `max_results` (int, default: 10): Number of unread emails to retrieve
-- `folder` (string, default: "INBOX"): Mailbox folder name
+- `folder` (string, default: "INBOX"): Gmail folder name
 
 ### get_emails_from_sender
 Get emails from a specific sender.
@@ -111,7 +85,7 @@ Get emails from a specific sender.
 **Parameters:**
 - `sender` (string): Email address of the sender
 - `max_results` (int, default: 10): Number of emails to retrieve
-- `folder` (string, default: "INBOX"): Mailbox folder name
+- `folder` (string, default: "INBOX"): Gmail folder name
 
 ### search_emails
 Search emails using IMAP search criteria.
@@ -119,20 +93,15 @@ Search emails using IMAP search criteria.
 **Parameters:**
 - `query` (string): IMAP search query
 - `max_results` (int, default: 10): Maximum results to return
-- `folder` (string, default: "INBOX"): Mailbox folder to search
+- `folder` (string, default: "INBOX"): Gmail folder to search
 
-**Query Examples:**
-- `UNSEEN` - Unread messages
-- `FROM "user@example.com"` - Emails from specific sender
-- `SUBJECT "invoice"` - Emails with "invoice" in subject
-- `FLAGGED` - Starred/flagged emails
-- `UNFLAGGED` - Unstarred emails
-- `ALL` - All emails (default search)
-- `BEFORE <date>` - Emails before a date (e.g., `BEFORE "1-Jan-2024"`)
-- `SINCE <date>` - Emails since a date
-- `LARGER <bytes>` - Emails larger than size
-
-You can combine criteria: `UNSEEN FROM "user@example.com"` or `SUBJECT "urgent" FLAGGED`
+**Query examples:**
+- `UNSEEN` — Unread messages
+- `FROM "user@example.com"` — Emails from a specific sender
+- `SUBJECT "invoice"` — Emails with "invoice" in subject
+- `FLAGGED` — Starred emails
+- `SINCE "1-Jan-2024"` — Emails since a date
+- `UNSEEN FROM "user@example.com"` — Combine criteria
 
 ### get_emails_by_subject
 Get emails by subject text.
@@ -140,7 +109,7 @@ Get emails by subject text.
 **Parameters:**
 - `subject` (string): Subject text to search for
 - `max_results` (int, default: 10): Maximum emails to retrieve
-- `folder` (string, default: "INBOX"): Mailbox folder to search
+- `folder` (string, default: "INBOX"): Gmail folder to search
 
 ### send_email
 Send an email.
@@ -158,70 +127,54 @@ Get full details of a specific email.
 - `message_id` (string): Email ID from IMAP
 
 ### list_folders
-List all available mailbox folders.
-
-## Supported Email Providers
-
-### Gmail
-- IMAP Server: `imap.gmail.com` (port 993)
-- SMTP Server: `smtp.gmail.com` (port 587)
-- Requires: App Password (not your regular Gmail password)
+List all available Gmail folders.
 
 ## Configuration
 
-The server uses environment variables for configuration:
-
-- `EMAIL_ADDRESS`: Your email address (required)
-- `EMAIL_PASSWORD`: Your password or app password (required)
-- `IMAP_SERVER`: IMAP server address (default: imap.gmail.com)
-- `SMTP_SERVER`: SMTP server address (default: smtp.gmail.com)
-
-## Usage Example with Claude
-
-You can use this MCP server with Claude by adding it to your Claude configuration. After setting up the server, it will be available as a tool set that Claude can use to read, search, and send emails.
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `EMAIL_ADDRESS` | Yes | — | Your Gmail address |
+| `EMAIL_PASSWORD` | Yes | — | Gmail App Password |
+| `IMAP_SERVER` | No | `imap.gmail.com` | IMAP server |
+| `SMTP_SERVER` | No | `smtp.gmail.com` | SMTP server |
+| `ANTHROPIC_API_KEY` | Yes (Web UI) | — | API key for AI chat |
 
 ## Troubleshooting
 
 ### "Authentication failed"
-- For Gmail: Make sure you're using an App Password, not your regular Gmail password
-- For other providers: Verify your password is correct
-- Make sure IMAP/SMTP is enabled in your email account settings
+- Make sure you're using a Gmail **App Password**, not your regular Gmail password
+- Confirm IMAP is enabled in Gmail Settings → See all settings → Forwarding and POP/IMAP
 
 ### "Connection refused"
-- Check your IMAP/SMTP server addresses
-- Verify your email provider's IMAP/SMTP ports
-- Check if your firewall blocks these ports
-
-### "Certificate verification failed"
-- This usually happens with corporate firewalls
-- The server uses SSL certificates for secure connections
+- Verify IMAP is enabled in your Gmail account settings
+- Check that your firewall doesn't block port 993 (IMAP) or 587 (SMTP)
 
 ### "No module named 'mcp'"
-- Rebuild the Docker image: `docker build -t gmail-mcp-server .`
-
-## Security Notes
-
-- Never commit `.env` file to version control
-- Never hardcode credentials in scripts
-- The server requires your email password - store it safely
-- Use app-specific passwords when available (Gmail, Yahoo, etc.)
-- The server only supports read-only access to IMAP unless you explicitly allow send
+- Rebuild the Docker image: `docker compose build`
 
 ## File Structure
 
 ```
 gmail-mcp-server/
-├── gmail_mcp_server.py      # Main MCP server implementation
-├── gmail_client.py          # IMAP/SMTP email client wrapper
-├── Dockerfile               # Docker build configuration
-├── pyproject.toml           # Project configuration
-├── requirements.txt         # Python dependencies
-├── .env.example             # Example environment variables
-├── .gitignore              # Git ignore rules
-├── setup.py                # Setup validation script
-├── mcp-config.json         # MCP configuration example
-└── README.md               # This file
+├── gmail_mcp_server.py   # MCP server entry point
+├── gmail_client.py       # IMAP/SMTP client wrapper
+├── api_server.py         # FastAPI REST server for the web UI
+├── ui/
+│   ├── index.html        # Web UI markup
+│   ├── app.js            # Web UI JavaScript
+│   └── styles.css        # Web UI styles
+├── Dockerfile            # Docker build configuration
+├── docker-compose.yml    # Docker Compose services
+├── requirements.txt      # Python dependencies
+├── .env.example          # Example environment variables
+└── mcp-config.json       # MCP configuration example
 ```
+
+## Security Notes
+
+- Never commit your `.env` file — it contains live credentials
+- Always use a Gmail App Password, not your account password
+- The App Password grants access only to IMAP/SMTP, not your full Google account
 
 ## License
 
