@@ -701,6 +701,36 @@ function createAiBubble() {
   return div;
 }
 
+// Minimal safe markdown renderer — escapes HTML first, then applies transforms
+function renderMarkdown(raw) {
+  const e = raw
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  return e
+    // Code blocks (``` ... ```)
+    .replace(/```[\w]*\n?([\s\S]*?)```/g, (_, c) =>
+      `<pre style="background:#f1f3f4;border-radius:6px;padding:8px 10px;font-size:12px;overflow-x:auto;margin:4px 0"><code>${c.trimEnd()}</code></pre>`)
+    // Inline code
+    .replace(/`([^`\n]+)`/g, '<code style="background:#f1f3f4;padding:1px 5px;border-radius:3px;font-size:0.88em;font-family:monospace">$1</code>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+    // Headings (## / ###)
+    .replace(/^#{1,3} (.+)$/gm, '<p style="font-weight:600;margin:6px 0 2px">$1</p>')
+    // Bullet list items
+    .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
+    // Numbered list items
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    // Wrap consecutive <li> blocks in <ul>
+    .replace(/(<li>[\s\S]*?<\/li>)(\n<li>[\s\S]*?<\/li>)*/g, m =>
+      `<ul style="margin:4px 0;padding-left:18px;list-style:disc">${m}</ul>`)
+    // Paragraph breaks
+    .replace(/\n{2,}/g, '<br><br>')
+    // Single line breaks
+    .replace(/\n/g, '<br>');
+}
+
 function appendToolChip(name, done = false) {
   const msgs = document.getElementById('chatMessages');
   const chip = document.createElement('div');
@@ -753,7 +783,9 @@ async function sendChatMessage() {
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
+    const msgs = document.getElementById('chatMessages');
     let buf = '';
+    let rawText = '';  // accumulate full AI text for markdown rendering
 
     while (true) {
       const { done, value } = await reader.read();
@@ -769,8 +801,9 @@ async function sendChatMessage() {
         try { evt = JSON.parse(line.slice(6)); } catch { continue; }
 
         if (evt.type === 'text') {
-          aiBubble.textContent += evt.text;
-          document.getElementById('chatMessages').scrollTop = 9999;
+          rawText += evt.text;
+          aiBubble.textContent = rawText;  // plain text while streaming
+          msgs.scrollTop = msgs.scrollHeight;
         } else if (evt.type === 'tool_call') {
           const chip = appendToolChip(evt.name, false);
           activeToolChips[evt.name] = chip;
@@ -778,14 +811,17 @@ async function sendChatMessage() {
           const chip = activeToolChips[evt.name];
           if (chip) {
             chip.className = 'tool-chip done';
-            chip.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> ${evt.name}`;
+            chip.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> ${escapeHtml(evt.name)}`;
           }
         } else if (evt.type === 'error') {
           aiBubble.textContent = `Error: ${evt.text}`;
           aiBubble.style.background = '#fce8e6';
           aiBubble.style.color = '#c5221f';
         } else if (evt.type === 'done') {
+          // Render markdown now that the full response is received
+          aiBubble.innerHTML = renderMarkdown(rawText);
           aiBubble.classList.remove('streaming');
+          msgs.scrollTop = msgs.scrollHeight;
         }
       }
     }

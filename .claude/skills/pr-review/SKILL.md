@@ -8,12 +8,21 @@ You are reviewing changes on the current branch and creating a PR to `main`.
 
 ## Steps
 
-### 1. Understand the changes
-- Run `git diff main...HEAD` to see all changes.
-- Run `git log main...HEAD --oneline` to see commits.
+### 1. Commit any uncommitted changes
+- Run `git status --short` to check for uncommitted changes.
+- If there are modified or untracked files (excluding `.env` and any secrets), stage and commit them:
+  - Stage specific files: `git add <file1> <file2> ...` — never `git add .` blindly, and never stage `.env`.
+  - Write a concise commit message explaining the why.
+  - Use a HEREDOC to pass the commit message: `git commit -m "$(cat <<'EOF'\n<message>\nEOF\n)"`
+- If there is nothing to commit, skip this step.
+
+### 2. Understand the changes
+- Run `git fetch origin` first to get the latest remote state.
+- Run `git diff origin/main...HEAD` to see all changes.
+- Run `git log origin/main...HEAD --oneline` to see commits.
 - Identify the intent — what problem does this solve?
 
-### 2. Review checklist
+### 3. Review checklist
 
 **Code quality**
 - Is the logic correct and easy to follow?
@@ -29,7 +38,7 @@ You are reviewing changes on the current branch and creating a PR to `main`.
 **Breaking changes**
 - API contract changes? Dependency upgrades?
 
-### 3. Create the PR
+### 4. Create the PR
 
 After reviewing, create a PR from the current branch to `main` using:
 
