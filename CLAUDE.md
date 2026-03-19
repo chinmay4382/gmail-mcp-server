@@ -13,7 +13,7 @@
 - Read existing code before making changes — match the style, naming, and patterns already in place.
 - Keep changes focused and minimal; don't refactor code unrelated to the task.
 - Prefer editing existing files over creating new ones.
-- Don't add comments unless the logic is non-obvious.
+- Only add comments for complex functions where the logic is not self-evident — do not comment simple, readable code.
 
 ## General Behavior
 

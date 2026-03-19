@@ -1,12 +1,14 @@
 ---
 name: frontend
 description: Build, debug, or review frontend code for the Gmail MCP Client — single-file vanilla JS/HTML/Tailwind UI at ui/index.html.
-allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
 ## Project Context
 
-The entire frontend lives in **`ui/index.html`** — a single-file vanilla JS + Tailwind CSS app. No build step, no framework, no TypeScript. Gmail-inspired design.
+The frontend is split across three files — no build step, no framework, no TypeScript. Gmail-inspired design:
+- **`ui/index.html`** — markup and structure
+- **`ui/app.js`** — all JavaScript (state, API calls, event handlers, rendering)
+- **`ui/styles.css`** — custom CSS (animations, overrides; Tailwind handles the rest)
 
 **Key architecture facts:**
 - Styling: Tailwind CSS (CDN) + custom `<style>` block for animations and overrides
@@ -29,8 +31,8 @@ The entire frontend lives in **`ui/index.html`** — a single-file vanilla JS + 
 
 ## Rules for this project
 
-1. **Single file only** — all changes go in `ui/index.html`. Do not create separate JS/CSS files.
-2. **Read the full file first** before making any changes — the HTML, style block, and JS are tightly coupled.
+1. **Three files only** — changes go in `ui/index.html`, `ui/app.js`, or `ui/styles.css`. Do not create additional files.
+2. **Read all three files first** before making any changes — the HTML, JS, and CSS are tightly coupled.
 3. **Follow existing patterns** — new functions should match the style of `apiFetch`, `renderEmailList`, `showToast`, etc.
 4. **Never use `innerHTML` with unsanitized user data** — always escape email content (subject, from, body) before injecting into DOM. Use `textContent` or a sanitize helper.
 5. **Tailwind first** — use Tailwind utility classes for layout/spacing; only add custom CSS for animations or things Tailwind can't do.
@@ -49,4 +51,4 @@ The entire frontend lives in **`ui/index.html`** — a single-file vanilla JS + 
 
 `/frontend $ARGUMENTS`
 
-Read `ui/index.html` first, identify the relevant section, then implement the change following the rules above.
+Read `ui/index.html`, `ui/app.js`, and `ui/styles.css` first, identify the relevant section, then implement the change following the rules above.
